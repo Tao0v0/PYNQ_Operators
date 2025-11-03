@@ -19,7 +19,7 @@ class PatchEmbed:
 
     def __init__(self, c1, c2, kernel_size=7, stride=4, padding=3, eps=1e-5, groups=1, in_h=None, in_w=None, use_bias=True):
         if in_h is None or in_w is None:
-            raise ValueError("PatchEmbed 需要在构造时提供 in_h、in_w，以便 conv2d 预先建图。")
+            raise ValueErro
 
         self.c1 = int(c1)
         self.c2 = int(c2)
@@ -32,10 +32,9 @@ class PatchEmbed:
         self.in_w = int(in_w)
         self.use_bias = bool(use_bias)
 
-        # 内部模型
+
         self.m = model(backend=software())
 
-        # 建图：Conv2d -> LN(tokens)
         self.m.add(conv2d(
             out_channels=self.c2, in_channels=self.c1,
             kernel_size=(self.kh, self.kw),
@@ -50,7 +49,7 @@ class PatchEmbed:
         self.m.add(layernorm_tokens(C=self.c2, eps=self.eps))
         self.ln_idx = len(self.m.backend.W) - 1
 
-        # 输出空间尺寸
+
         self.out_h = (self.in_h + 2*self.padding - self.kh) // self.stride + 1
         self.out_w = (self.in_w + 2*self.padding - self.kw) // self.stride + 1
 
@@ -69,7 +68,6 @@ class PatchEmbed:
 
         W = np.asarray(W, dtype=np.float32)
         if W.ndim == 4:
-            # 期望 (C_out, C_in_g, Kh, Kw)
             expect4 = (self.c2, Cin_g, Kh, Kw)
             if tuple(W.shape) != expect4:
                 raise ValueError(f"conv 4D weight shape {W.shape} != {expect4}")
@@ -82,7 +80,6 @@ class PatchEmbed:
         else:
             raise ValueError(f"W.ndim 必须为 2 或 4，当前 {W.ndim}")
 
-        # 组装 full 矩阵（带或不带偏置列）
         full_cols = W_core.shape[1] + (1 if self.use_bias else 0)
         W_full = np.zeros((self.c2, full_cols), dtype=np.float32)
         W_full[:, :W_core.shape[1]] = W_core
@@ -110,11 +107,8 @@ class PatchEmbed:
         Wln[0, :self.c2] = np.asarray(gamma, np.float32)
         Wln[1, :self.c2] = np.asarray(beta,  np.float32)
 
-    # -------- 向后兼容：保留旧接口（内部走新的 load_conv） --------
+
     def load_conv_full(self, W_full):
-        """
-        兼容旧接口：直接写 full 矩阵 (C_out, C_in_g*Kh*Kw + (bias?1:0))
-        """
         Cin_g = self.c1 // self.groups
         expect_cols = Cin_g * self.kh * self.kw + (1 if self.use_bias else 0)
         if tuple(W_full.shape) != (self.c2, expect_cols):
@@ -122,10 +116,6 @@ class PatchEmbed:
         self.m.backend.W[self.conv_idx] = np.asarray(W_full, np.float32)
 
     def load_conv_core_bias(self, W_core, bias=None):
-        """
-        兼容旧接口：分开加载 core/bias
-        等价于：load_conv(W_core, bias) 其中 W_core 为 2D
-        """
         self.load_conv(W_core, bias)
 
     # ---------------- 前向 ----------------
@@ -142,15 +132,6 @@ class PatchEmbed:
         return (B, self.out_h * self.out_w, self.c2)
 
 class MLP:
-    """
-    使用你当前的 pynn 组件实现：
-      1) proj_up   : dense (C -> expand*C)，输入/输出 (B,N,C)
-      2) dwconv    : conv2d (groups=expand*C, k=3, s=1, p=1)，内部转为 (B,C,H,W) 做卷积，输出回到 (B,N,expand*C)
-      3) GELU      : 对 (B,N,expand*C) 逐元素
-      4) proj_back : dense (expand*C -> C)，输出 (B,N,C)
-
-    权重加载接口模仿 patchembed：分别调用 load_proj / load_dwconv / load_proj_back
-    """
     def __init__(self, C, H, W, expansion=4, kernel_size=3, padding=None, use_bias=True):
         self.C = int(C)
         self.H = int(H)
@@ -197,7 +178,7 @@ class MLP:
         )
         self.back_idx = len(self.m_back.backend.W) - 1
 
-    # ---------------- 权重加载（仿 patchembed） ----------------
+    # ---------------- 权重加载----------------
     def load_proj(self, weight, bias=None):
         """ weight:(eC, C)，bias:(eC,) 或 None """
         eC, C = self.expansion * self.C, self.C
@@ -789,9 +770,8 @@ stage4 输出前30个值: [0.161532, -0.039586, 0.544022, 0.03888, -0.055521, 0.
 
 
 
-# # 可选：如果你没在文件更上方导入过，再保留这两行
-# # import numpy as np
-# # import time
+
+
 
 # stage1_pack_path = "cmnext_stages1_4_weights.npz"
 # B_stage1, C_in_stage1, C_out_stage1 = 1, 3, 64
@@ -893,4 +873,5 @@ stage4 输出前30个值: [0.161532, -0.039586, 0.544022, 0.03888, -0.055521, 0.
 # print("\nstage2 最终输出:", y_final_stage2.shape)
 # print("stage2 前 30 个数：", y_final_stage2.ravel()[:30])
 # print(f"stage2 前向耗时: {(t1_stage2 - t0_stage2)*1000:.2f} ms")
+
 

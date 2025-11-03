@@ -1,4 +1,3 @@
-# infer.py  —— 最小可跑，仅推理，随便初始化权重
 from pathlib import Path
 import numpy as np
 import scipy.io
@@ -112,10 +111,7 @@ print("y.shape =", y.shape)
 
  
 
-# # ★ 关键：清空共享的 layer_list（类属性），然后再建新模型
-# from pynn.model import model as Model
-# Model.layer_list = []   # 防止把旧模型里的卷积层带进来
-
+ 
 
 # 新建一个“纯全连接”的模型（和前面的 m 完全独立）
 m_new = model(backend=software())
@@ -147,4 +143,5 @@ print("FEED y.shape =", y.shape)                 # 应该打印 (8, 64, 10, 10)
 l0 = m_new.layer_list[0]
 print("CONV expects:", l0.in_channels, l0.in_h, l0.in_w)  # 应该是 64 10 10
 logits = m_new.predict(y)
+
 print("logits:", logits.shape)   # 期望 (10, 8) 或 (8, 10) 取决于实现

@@ -6,4 +6,4 @@
 
 - 测试用例cmnext是针对 B C H W输入， B N C输出的模型。加入了layernorm和Attention模块
 
-- 
+
